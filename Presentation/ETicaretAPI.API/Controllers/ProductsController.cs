@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 using ETicaretAPI.Application.ViewModels.Products;
 using System.Net;
 using ETicaretAPI.Application.RequestParameters;
+using ETicaretAPI.Application.Abstractions.Storage;
+
 
 namespace ETicaretAPI.API.Controllers
 {
@@ -13,19 +15,48 @@ namespace ETicaretAPI.API.Controllers
     public class ProductsController : ControllerBase
     {
 
-        readonly private IProductWriteRepository _productWriteRepository;
+        private readonly IProductWriteRepository _productWriteRepository;
+        private readonly IProductReadRepository _productReadRepository;
+
+        private readonly IProductImageFileWriteRepository _productImageFileWriteRepository;
+        private readonly IProductImageFileReadRepository _productImageFileReadRepository;
+
+        private readonly IInvoiceFileWriteRepository _invoiceFileWriteRepository;
+        private readonly IInvoiceFileReadRepository _invoiceFileReadRepository;
+
+        private readonly IFileWriteRepository _fileWriteRepository;
+        private readonly IFileReadRepository _fileReadRepository;
+
+
         private readonly IWebHostEnvironment _webHostEnvironment;
-        readonly private IProductReadRepository _productReadRepository;
+        private readonly IStorageService _storageService;
+
 
         public ProductsController(
             IProductReadRepository productReadRepository,
             IProductWriteRepository productWriteRepository,
-            IWebHostEnvironment webHostEnvironment
-            )
+            IWebHostEnvironment webHostEnvironment,
+
+            IProductImageFileWriteRepository productImageFileWriteRepository,
+            IProductImageFileReadRepository productImageFileReadRepository,
+            IInvoiceFileWriteRepository invoiceFileWriteRepository,
+            IInvoiceFileReadRepository invoiceFileReadRepository,
+            IFileWriteRepository fileWriteRepository,
+            IFileReadRepository fileReadRepository
+,
+            IStorageService storageService)
         {
             _productReadRepository = productReadRepository;
             _productWriteRepository = productWriteRepository;
             _webHostEnvironment = webHostEnvironment;
+
+            _productImageFileWriteRepository = productImageFileWriteRepository;
+            _productImageFileReadRepository = productImageFileReadRepository;
+            _invoiceFileWriteRepository = invoiceFileWriteRepository;
+            _invoiceFileReadRepository = invoiceFileReadRepository;
+            _fileReadRepository = fileReadRepository;
+            _fileWriteRepository = fileWriteRepository;
+            _storageService = storageService;
         }
 
 
@@ -108,28 +139,18 @@ namespace ETicaretAPI.API.Controllers
 
         public async Task<IActionResult> Upload()
         {
-            string uploadPath = Path.Combine(_webHostEnvironment.WebRootPath,"resource/product-images");
+            var datas = await _storageService.UploadAsync("resource/files", Request.Form.Files);
 
-            if (!Directory.Exists(uploadPath))
-            {
-                Directory.CreateDirectory(uploadPath);
-            }
-
-            foreach (IFormFile file in Request.Form.Files)
-            {
-                Random r = new Random();
-
-                string fullPath = Path.Combine(uploadPath,$"{r.Next()}{Path.GetExtension(file.FileName)}");
-
-                using FileStream fileStream = new(fullPath, FileMode.Create, FileAccess.Write, FileShare.None, 1024 * 1024, useAsync: false);
-
-                await file.CopyToAsync(fileStream);
-                await fileStream.FlushAsync();
-
-            }
-
+            
+             await _productImageFileWriteRepository.AddRangeAsync(datas.Select(d => new ProductImageFile() 
+             {
+                 FileName = d.fileName,
+                 Path = d.pathOrContainerName,
+                 Storage = _storageService.StorageName,
+             }).ToList());
+             await _productImageFileWriteRepository.SaveAsync();
+           
             return Ok();
-
         }
 
     }
